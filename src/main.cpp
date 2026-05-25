@@ -18,9 +18,13 @@
 #include <relay/wb_mr6c.h>
 #include <sensor/water_level.h>
 #include <binary_sensor/wb_mr6c.h>
+#include <NTPClient.h>
+#include <WiFiUdp.h>
 
 #include "defines.h"
 #include "config.h"
+#include "service/sun.h"
+#include "automation/light.h"
 #include "web/handler.h"
 
 TCA9555 tca9555(0x20, &Wire);
@@ -33,6 +37,11 @@ EDWB::WirenBoard modbus(Serial1, RS485RTS);
 EDHealthCheck::HealthCheck healthCheck;
 EDHA::DiscoveryMgr discoveryMgr;
 
+WiFiUDP ntpUDP;
+NTPClient timeClient(ntpUDP);
+
+Sun sun;
+
 Handler handler(&configMgr, &networkMgr, &healthCheck);
 
 EDCommon::Light::Relay* localAreaBacklight = nullptr;
@@ -42,6 +51,8 @@ EDCommon::Relay::WBMR6C* leftLawnWatering = nullptr;
 EDCommon::Relay::WBMR6C* localAreaRightLawnWatering = nullptr;
 EDCommon::Sensor::WaterLevel* rainwaterPitLevel = nullptr;
 EDCommon::BinarySensor::WBMR6C* gateContact = nullptr;
+
+LightAutomation* lightAutomation = nullptr;
 
 void setup()
 {
@@ -218,6 +229,13 @@ void setup()
         EDCommon::BinarySensor::withDiscovery(&discoveryMgr, device, EDHA::deviceClassBinarySensorDoor)
     });
 
+    timeClient.begin();
+    timeClient.setTimeOffset(3600*3); // tmp, move to config
+
+    sun.init(SunConfig(44.067465f, 42.887368f, 3600)); // tmp, move to config
+
+    lightAutomation = new LightAutomation(&timeClient, &sun, localAreaBacklight);
+
     LOGI("setup", "complete");
 }
 
@@ -228,6 +246,7 @@ void loop()
     ArduinoOTA.handle();
     healthCheck.loop();
     networkLogger.update();
+    timeClient.update();
 
     localAreaBacklight->update();
     yardFenceBacklight->update();
@@ -236,4 +255,6 @@ void loop()
     localAreaRightLawnWatering->update();
     rainwaterPitLevel->update();
     gateContact->update();
+
+    lightAutomation->update();
 }
