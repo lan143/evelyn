@@ -41,6 +41,7 @@ void Handler::init()
 
             entity["modbusSpeed"] = config->modbusSpeed;
             entity["modbusAddressWBMR6C"] = config->modbusAddressWBMR6C;
+            entity["modbusAddressQDY30A"] = config->modbusAddressQDY30A;
         });
 
         response->write(payload.c_str());
@@ -51,6 +52,7 @@ void Handler::init()
         if (
             !request->hasParam("modbusSpeed", true)
             || !request->hasParam("modbusAddressWBMR6C", true)
+            || !request->hasParam("modbusAddressQDY30A", true)
         ) {
             request->send(422, "application/json", "{\"message\": \"not present modbus params in request\"}");
             return;
@@ -58,6 +60,7 @@ void Handler::init()
 
         const AsyncWebParameter* modbusSpeedParam = request->getParam("modbusSpeed", true);
         const AsyncWebParameter* modbusAddressWBMR6CParam = request->getParam("modbusAddressWBMR6C", true);
+        const AsyncWebParameter* modbusAddressQDY30AParam = request->getParam("modbusAddressQDY30A", true);
 
         int modbusSpeed;
         if (EDUtils::str2int(&modbusSpeed, modbusSpeedParam->value().c_str(), 10) != EDUtils::STR2INT_SUCCESS) {
@@ -93,8 +96,15 @@ void Handler::init()
             return;
         }
 
+        int modbusAddressQDY30A;
+        if (EDUtils::str2int(&modbusAddressQDY30A, modbusAddressQDY30AParam->value().c_str(), 10) != EDUtils::STR2INT_SUCCESS) {
+            request->send(422, "application/json", "{\"message\": \"Incorrect QDY30A address\"}");
+            return;
+        }
+
         _configMgr->getData()->modbusSpeed = modbusSpeed;
         _configMgr->getData()->modbusAddressWBMR6C = modbusAddressWBMR6C;
+        _configMgr->getData()->modbusAddressQDY30A = modbusAddressQDY30A;
 
         if (_configMgr->store()) {
             request->send(200, "application/json", "{}");
@@ -115,6 +125,7 @@ void Handler::init()
             entity["mqttPort"] = config->mqtt.port;
             entity["mqttLogin"] = config->mqtt.login;
             entity["mqttPassword"] = config->mqtt.password;
+            entity["mqttTopicPrefix"] = config->mqttTopicsPrefix;
             entity["mqttIsHADiscovery"] = config->mqttIsHADiscovery;
             entity["mqttHADiscoveryPrefix"] = config->mqttHADiscoveryPrefix;
         });
@@ -159,6 +170,7 @@ void Handler::init()
             || !request->hasParam("login", true)
             || !request->hasParam("password", true)
             || !request->hasParam("haDiscoveryPrefix", true)
+            || !request->hasParam("topicPrefix", true)
         ) {
             request->send(422, "application/json", "{\"message\": \"not present mqtt params in request\"}");
             return;
@@ -171,6 +183,7 @@ void Handler::init()
         const AsyncWebParameter* password = request->getParam("password", true);
         const AsyncWebParameter* haDiscoveryPrefix = request->getParam("haDiscoveryPrefix", true);
         const AsyncWebParameter* ishaDiscoveryEnabled = request->getParam("mqttIsHADiscovery", true);
+        const AsyncWebParameter* topicPrefixParam = request->getParam("topicPrefix", true);
 
         if (host->value().length() == 0 || host->value().length() > HOST_LEN-1) {
             request->send(422, "application/json", "{\"message\": \"MQTT host lenght invalid\"}");
@@ -203,11 +216,17 @@ void Handler::init()
             return;
         }
 
+        if (topicPrefixParam->value().length() > MQTT_TOPIC_LEN-1) {
+            request->send(422, "application/json", "{\"message\": \"Topic prefix length invalid\"}");
+            return;
+        }
+
         strcpy(config->mqtt.host, host->value().c_str());
         config->mqtt.port = (uint16_t)mqttPort;
         strcpy(config->mqtt.login, login->value().c_str());
         strcpy(config->mqtt.password, password->value().c_str());
         strcpy(config->mqttHADiscoveryPrefix, haDiscoveryPrefix->value().c_str());
+        strcpy(config->mqttTopicsPrefix, topicPrefixParam->value().c_str());
 
         if (strcmp(ishaDiscoveryEnabled->value().c_str(), "true") == 0) {
             config->mqttIsHADiscovery = true;

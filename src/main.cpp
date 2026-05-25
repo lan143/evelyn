@@ -12,7 +12,12 @@
 #include <log/log.h>
 #include <Wire.h>
 #include <TCA9555.h>
+#include <device/qdy30a.h>
 #include <device/wb_mr6c.h>
+#include <light/relay_light.h>
+#include <relay/wb_mr6c.h>
+#include <sensor/water_level.h>
+#include <binary_sensor/wb_mr6c.h>
 
 #include "defines.h"
 #include "config.h"
@@ -29,6 +34,14 @@ EDHealthCheck::HealthCheck healthCheck;
 EDHA::DiscoveryMgr discoveryMgr;
 
 Handler handler(&configMgr, &networkMgr, &healthCheck);
+
+EDCommon::Light::Relay* localAreaBacklight = nullptr;
+EDCommon::Light::Relay* yardFenceBacklight = nullptr;
+EDCommon::Light::Relay* localAreaGarland = nullptr;
+EDCommon::Relay::WBMR6C* leftLawnWatering = nullptr;
+EDCommon::Relay::WBMR6C* localAreaRightLawnWatering = nullptr;
+EDCommon::Sensor::WaterLevel* rainwaterPitLevel = nullptr;
+EDCommon::BinarySensor::WBMR6C* gateContact = nullptr;
 
 void setup()
 {
@@ -64,8 +77,10 @@ void setup()
 
         strcpy(config->otaPassword, "somestrongpassword");
 
+        snprintf(config->mqttTopicsPrefix, MQTT_TOPIC_LEN, "evelyn/%s", EDUtils::getChipID());
+
         config->modbusSpeed = 9600;
-        config->addressQDY30A = 1;
+        config->modbusAddressQDY30A = 1;
         config->modbusAddressWBMR6C = 2;
     });
     configMgr.load();
@@ -112,6 +127,96 @@ void setup()
         ->setManufacturer(deviceManufacturer);
 
     auto mr6c = modbus.addMR6C(configMgr.getData()->modbusAddressWBMR6C);
+    mr6c->setInputMode(MR6C_CHANNEL_LOCAL_AREA_BACKLIGHT, EDWB::MR6C_INPUT_MODE_DONT_USE);
+    mr6c->setInputMode(MR6C_CHANNEL_YARD_FENCE_BACKLIGHT, EDWB::MR6C_INPUT_MODE_DONT_USE);
+    mr6c->setInputMode(MR6C_CHANNEL_LOCAL_AREA_GARLAND, EDWB::MR6C_INPUT_MODE_DONT_USE);
+    mr6c->setInputMode(MR6C_CHANNEL_LEFT_LAWN_WATERING, EDWB::MR6C_INPUT_MODE_DONT_USE);
+    mr6c->setInputMode(MR6C_CHANNEL_LOCAL_AREA_RIGHT_LAWN_WATERING, EDWB::MR6C_INPUT_MODE_DONT_USE);
+    mr6c->setInputMode(MR6C_CHANNEL_SIX, EDWB::MR6C_INPUT_MODE_DONT_USE);
+
+    auto localAreaBacklightRelay = new EDCommon::Relay::WBMR6C(mr6c);
+    localAreaBacklightRelay->init(MR6C_CHANNEL_LOCAL_AREA_BACKLIGHT, {});
+    localAreaBacklight = new EDCommon::Light::Relay(localAreaBacklightRelay);
+    localAreaBacklight->init({
+        EDCommon::Light::withMQTT(
+            &mqtt,
+            configMgr.getData()->mqttTopicsPrefix,
+            "evelyn",
+            "Local area backlight"
+        ), 
+        EDCommon::Light::withDiscovery(&discoveryMgr, device)
+    });
+
+    auto yardFenceBacklightRelay = new EDCommon::Relay::WBMR6C(mr6c);
+    yardFenceBacklightRelay->init(MR6C_CHANNEL_YARD_FENCE_BACKLIGHT, {});
+    yardFenceBacklight = new EDCommon::Light::Relay(yardFenceBacklightRelay);
+    yardFenceBacklight->init({
+        EDCommon::Light::withMQTT(
+            &mqtt,
+            configMgr.getData()->mqttTopicsPrefix,
+            "evelyn",
+            "Yard fence backlight"
+        ),
+        EDCommon::Light::withDiscovery(&discoveryMgr, device)
+    });
+
+    auto localAreaGarlandRelay = new EDCommon::Relay::WBMR6C(mr6c);
+    localAreaGarlandRelay->init(MR6C_CHANNEL_LOCAL_AREA_GARLAND, {});
+    localAreaGarland = new EDCommon::Light::Relay(localAreaGarlandRelay);
+    localAreaGarland->init({
+        EDCommon::Light::withMQTT(
+            &mqtt,
+            configMgr.getData()->mqttTopicsPrefix,
+            "evelyn",
+            "Local area garland"
+        ),
+        EDCommon::Light::withDiscovery(&discoveryMgr, device)
+    });
+
+    leftLawnWatering = new EDCommon::Relay::WBMR6C(mr6c);
+    leftLawnWatering->init(MR6C_CHANNEL_LEFT_LAWN_WATERING, {
+        EDCommon::Relay::withMQTT(
+            &mqtt,
+            configMgr.getData()->mqttTopicsPrefix,
+            "evelyn",
+            "Left lawn watering"
+        ),
+        EDCommon::Relay::withDiscovery(&discoveryMgr, device)
+    });
+
+    localAreaRightLawnWatering = new EDCommon::Relay::WBMR6C(mr6c);
+    localAreaRightLawnWatering->init(MR6C_CHANNEL_LOCAL_AREA_RIGHT_LAWN_WATERING, {
+        EDCommon::Relay::withMQTT(
+            &mqtt,
+            configMgr.getData()->mqttTopicsPrefix,
+            "evelyn",
+            "Local area right watering"
+        ),
+        EDCommon::Relay::withDiscovery(&discoveryMgr, device)
+    });
+
+    auto qdy30a = modbus.addQDY30A(configMgr.getData()->modbusAddressQDY30A);
+    rainwaterPitLevel = new EDCommon::Sensor::WaterLevel(qdy30a);
+    rainwaterPitLevel->init({
+        EDCommon::Sensor::withMQTT(
+            &mqtt,
+            configMgr.getData()->mqttTopicsPrefix,
+            "evelyn",
+            "Rainwater pit level"
+        ),
+        EDCommon::Sensor::withDiscovery(&discoveryMgr, device)
+    });
+
+    gateContact = new EDCommon::BinarySensor::WBMR6C(mr6c);
+    gateContact->init(1, {
+        EDCommon::BinarySensor::withMQTT(
+            &mqtt,
+            configMgr.getData()->mqttTopicsPrefix,
+            "evelyn",
+            "Gate"
+        ),
+        EDCommon::BinarySensor::withDiscovery(&discoveryMgr, device, EDHA::deviceClassBinarySensorDoor)
+    });
 
     LOGI("setup", "complete");
 }
@@ -123,4 +228,12 @@ void loop()
     ArduinoOTA.handle();
     healthCheck.loop();
     networkLogger.update();
+
+    localAreaBacklight->update();
+    yardFenceBacklight->update();
+    localAreaGarland->update();
+    leftLawnWatering->update();
+    localAreaRightLawnWatering->update();
+    rainwaterPitLevel->update();
+    gateContact->update();
 }

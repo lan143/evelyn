@@ -21,7 +21,7 @@
 
 #define MR6C_CHANNEL_LOCAL_AREA_BACKLIGHT           1
 #define MR6C_CHANNEL_YARD_FENCE_BACKLIGHT           2
-#define MR6C_CHANNEL_YARD_GARLAND                   3
+#define MR6C_CHANNEL_LOCAL_AREA_GARLAND             3
 #define MR6C_CHANNEL_LEFT_LAWN_WATERING             4
 #define MR6C_CHANNEL_LOCAL_AREA_RIGHT_LAWN_WATERING 5
 #define MR6C_CHANNEL_SIX                            6

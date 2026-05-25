@@ -105,6 +105,11 @@
                             </div>
 
                             <div class="mb-3">
+                                <label for="mqttTopicPrefix" class="form-label">Topic's prefix</label>
+                                <input type="text" class="form-control" name="mqttTopicPrefix" id="mqttTopicPrefix">
+                            </div>
+
+                            <div class="mb-3">
                                 <input class="form-check-input" type="checkbox" value="" name="mqttIsHADiscovery" id="flexCheckDefault">
                                 <label class="form-check-label" for="flexCheckDefault">
                                     Enable Home Assistant auto discovery
@@ -145,39 +150,9 @@
                                 <input type="number" class="form-control" name="modbusAddressWBMR6C" id="modbusAddressWBMR6C">
                             </div>
 
-                            <div class="mb-12">
-                                <button type="submit" class="btn btn-primary">Save</button>
-                            </div>
-                        </form>
-                    </div>
-
-                    <div class="col-sm-6">
-                        <h1>Hallway settings</h1>
-
-                        <form id="hallway-settings">
                             <div class="mb-3">
-                                <label for="mqttCommandTopic" class="form-label">Command topic</label>
-                                <input type="text" class="form-control" name="mqttCommandTopic" id="mqttCommandTopic">
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="mqttStateTopic" class="form-label">State topic</label>
-                                <input type="text" class="form-control" name="mqttStateTopic" id="mqttStateTopic">
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="modbusAddressMTD262MB" class="form-label">Address MTD262MB</label>
-                                <input type="number" class="form-control" name="modbusAddressMTD262MB" id="modbusAddressMTD262MB">
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="modbusAddressWBLED" class="form-label">Address WB-LED</label>
-                                <input type="number" class="form-control" name="modbusAddressWBLED" id="modbusAddressWBLED">
-                            </div>
-
-                            <div class="mb-3">
-                                <label for="modbusAddressWBMS" class="form-label">Address WB-MS</label>
-                                <input type="number" class="form-control" name="modbusAddressWBMS" id="modbusAddressWBMS">
+                                <label for="modbusAddressQDY30A" class="form-label">Address QDY30A</label>
+                                <input type="number" class="form-control" name="modbusAddressQDY30A" id="modbusAddressQDY30A">
                             </div>
 
                             <div class="mb-12">

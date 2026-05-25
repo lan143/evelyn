@@ -25,6 +25,7 @@ function loadSettings() {
             $('form#mqtt input[name=mqttPort]').val(data.mqttPort);
             $('form#mqtt input[name=mqttLogin]').val(data.mqttLogin);
             $('form#mqtt input[name=mqttPassword]').val(data.mqttPassword);
+            $('form#mqtt input[name=mqttTopicPrefix]').val(data.mqttTopicPrefix);
             $('form#mqtt input[name=mqttHADiscoveryPrefix]').val(data.mqttHADiscoveryPrefix);
 
             if (data.mqttIsHADiscovery) {
@@ -44,25 +45,8 @@ function loadModbusSettings() {
         dataType: 'json',
         success: function (data) {
             $('form#modbus-settings select[name=modbusSpeed]').val(data.modbusSpeed);
-            $('form#modbus-settings select[name=modbusAddressWBMR6C]').val(data.modbusAddressWBMR6C);
-        },
-        error: function (xhr, str) {
-            alert('Errors while loading settings');
-        }
-    });
-}
-
-function loadHallwaySettings() {
-    $.ajax({
-        type: 'GET',
-        url: '/api/settings/hallway',
-        dataType: 'json',
-        success: function (data) {
-            $('form#hallway-settings input[name=mqttCommandTopic]').val(data.mqttCommandTopic);
-            $('form#hallway-settings input[name=mqttStateTopic]').val(data.mqttStateTopic);
-            $('form#hallway-settings input[name=modbusAddressMTD262MB]').val(data.modbusAddressMTD262MB);
-            $('form#hallway-settings input[name=modbusAddressWBLED]').val(data.modbusAddressWBLED);
-            $('form#hallway-settings input[name=modbusAddressWBMS]').val(data.modbusAddressWBMS);
+            $('form#modbus-settings input[name=modbusAddressWBMR6C]').val(data.modbusAddressWBMR6C);
+            $('form#modbus-settings input[name=modbusAddressQDY30A]').val(data.modbusAddressQDY30A);
         },
         error: function (xhr, str) {
             alert('Errors while loading settings');
@@ -97,7 +81,6 @@ $(function() {
     loadSettings();
     updateWiFiStatus();
     loadModbusSettings();
-    loadHallwaySettings();
 
     setInterval(updateWiFiStatus, 10000);
 
@@ -154,6 +137,7 @@ $(function() {
                 port: $(this).find('input[name=mqttPort]').val(),
                 login: $(this).find('input[name=mqttLogin]').val(),
                 password: $(this).find('input[name=mqttPassword]').val(),
+                topicPrefix: $(this).find('input[name=mqttTopicPrefix]').val(),
                 haDiscoveryPrefix: $(this).find('input[name=mqttHADiscoveryPrefix]').val(),
                 mqttIsHADiscovery: $(this).find('input[name=mqttIsHADiscovery]').is(':checked'),
                 commandTopic: $(this).find('input[name=mqttCommandTopic]').val(),
@@ -187,7 +171,8 @@ $(function() {
             dataType: 'json',
             data: {
                 modbusSpeed: $(this).find('select[name=modbusSpeed]').val(),
-                modbusAddressWBMR6C: $(this).find('select[name=modbusAddressWBMR6C]').val()
+                modbusAddressWBMR6C: $(this).find('input[name=modbusAddressWBMR6C]').val(),
+                modbusAddressQDY30A: $(this).find('input[name=modbusAddressQDY30A]').val(),
             },
             success: function (data) {
                 alert('Modbus settings successful changed. Reboot...');
@@ -201,38 +186,6 @@ $(function() {
             error: function (xhr, str) {
                 var data = JSON.parse(xhr.responseText);
                 alert('Errors while save modbus settings: ' + data.message);
-            }
-        });
-
-        return false;
-    });
-
-    $('form#hallway-settings').submit(function(event) {
-        event.preventDefault();
-
-        $.ajax({
-            type: 'POST',
-            url: '/api/settings/hallway/update',
-            dataType: 'json',
-            data: {
-                mqttCommandTopic: $(this).find('select[name=mqttCommandTopic]').val(),
-                mqttStateTopic: $(this).find('select[name=mqttStateTopic]').val(),
-                modbusAddressMTD262MB: $(this).find('select[name=modbusAddressMTD262MB]').val(),
-                modbusAddressWBLED: $(this).find('select[name=modbusAddressWBLED]').val(),
-                modbusAddressWBMS: $(this).find('select[name=modbusAddressWBMS]').val()
-            },
-            success: function (data) {
-                alert('Hallway settings successful changed. Reboot...');
-
-                $.ajax({
-                    type: 'POST',
-                    url: '/api/reboot',
-                    dataType: 'json'
-                });
-            },
-            error: function (xhr, str) {
-                var data = JSON.parse(xhr.responseText);
-                alert('Errors while update hallway settings: ' + data.message);
             }
         });
 
