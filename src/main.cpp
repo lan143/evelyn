@@ -37,9 +37,12 @@ EDWB::WirenBoard modbus(Serial1, RS485RTS);
 EDWB::MR6C* mr6c = nullptr;
 bool mr6cInited = false;
 int64_t mr6cLastUpdateTime = 0;
+bool gateContactInited = false;
+int64_t gateContactLastUpdateTime = 0;
 
 EDHealthCheck::HealthCheck healthCheck;
 EDHA::DiscoveryMgr discoveryMgr;
+EDHA::Device* device = nullptr;
 
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP);
@@ -57,6 +60,8 @@ EDCommon::Sensor::WaterLevel* rainwaterPitLevel = nullptr;
 EDCommon::BinarySensor::WBMR6C* gateContact = nullptr;
 
 LightAutomation* lightAutomation = nullptr;
+
+void initGateContact();
 
 void setup()
 {
@@ -134,7 +139,7 @@ void setup()
         }
     );
 
-    EDHA::Device* device = discoveryMgr.addDevice();
+    device = discoveryMgr.addDevice();
     device->setHWVersion(deviceHWVersion)
         ->setSWVersion(deviceFWVersion)
         ->setModel(deviceModel)
@@ -144,7 +149,7 @@ void setup()
     mr6c = modbus.addMR6C(configMgr.getData()->modbusAddressWBMR6C);
 
     auto localAreaBacklightRelay = new EDCommon::Relay::WBMR6C(mr6c);
-    localAreaBacklightRelay->init(MR6C_CHANNEL_LOCAL_AREA_BACKLIGHT, {});
+    localAreaBacklightRelay->init(MR6C_CHANNEL_LOCAL_AREA_BACKLIGHT, -1, {});
     localAreaBacklight = new EDCommon::Light::Relay(localAreaBacklightRelay);
     localAreaBacklight->init({
         EDCommon::Light::withMQTT(
@@ -157,7 +162,7 @@ void setup()
     });
 
     auto yardFenceBacklightRelay = new EDCommon::Relay::WBMR6C(mr6c);
-    yardFenceBacklightRelay->init(MR6C_CHANNEL_YARD_FENCE_BACKLIGHT, {});
+    yardFenceBacklightRelay->init(MR6C_CHANNEL_YARD_FENCE_BACKLIGHT, -1, {});
     yardFenceBacklight = new EDCommon::Light::Relay(yardFenceBacklightRelay);
     yardFenceBacklight->init({
         EDCommon::Light::withMQTT(
@@ -170,7 +175,7 @@ void setup()
     });
 
     auto localAreaGarlandRelay = new EDCommon::Relay::WBMR6C(mr6c);
-    localAreaGarlandRelay->init(MR6C_CHANNEL_LOCAL_AREA_GARLAND, {});
+    localAreaGarlandRelay->init(MR6C_CHANNEL_LOCAL_AREA_GARLAND, -1, {});
     localAreaGarland = new EDCommon::Light::Relay(localAreaGarlandRelay);
     localAreaGarland->init({
         EDCommon::Light::withMQTT(
@@ -183,7 +188,7 @@ void setup()
     });
 
     leftLawnWatering = new EDCommon::Relay::WBMR6C(mr6c);
-    leftLawnWatering->init(MR6C_CHANNEL_LEFT_LAWN_WATERING, {
+    leftLawnWatering->init(MR6C_CHANNEL_LEFT_LAWN_WATERING, -1, {
         EDCommon::Relay::withMQTT(
             &mqtt,
             configMgr.getData()->mqttTopicsPrefix,
@@ -195,7 +200,7 @@ void setup()
     });
 
     localAreaRightLawnWatering = new EDCommon::Relay::WBMR6C(mr6c);
-    localAreaRightLawnWatering->init(MR6C_CHANNEL_LOCAL_AREA_RIGHT_LAWN_WATERING, {
+    localAreaRightLawnWatering->init(MR6C_CHANNEL_LOCAL_AREA_RIGHT_LAWN_WATERING, -1, {
         EDCommon::Relay::withMQTT(
             &mqtt,
             configMgr.getData()->mqttTopicsPrefix,
@@ -208,7 +213,7 @@ void setup()
 
     auto qdy30a = modbus.addQDY30A(configMgr.getData()->modbusAddressQDY30A);
     rainwaterPitLevel = new EDCommon::Sensor::WaterLevel(qdy30a);
-    rainwaterPitLevel->init({
+    rainwaterPitLevel->init(3, 10000, {
         EDCommon::Sensor::withMQTT(
             &mqtt,
             configMgr.getData()->mqttTopicsPrefix,
@@ -218,16 +223,8 @@ void setup()
         EDCommon::Sensor::withDiscovery(&discoveryMgr, device)
     });
 
-    gateContact = new EDCommon::BinarySensor::WBMR6C(mr6c);
-    gateContact->init(1, {
-        EDCommon::BinarySensor::withMQTT(
-            &mqtt,
-            configMgr.getData()->mqttTopicsPrefix,
-            "evelyn",
-            "Gate"
-        ),
-        EDCommon::BinarySensor::withDiscovery(&discoveryMgr, device, EDHA::deviceClassBinarySensorDoor)
-    });
+    gateContact = new EDCommon::BinarySensor::WBMR6C(1, EDHA::deviceClassBinarySensorDoor, false, mr6c);
+    initGateContact();
 
     timeClient.begin();
     timeClient.setTimeOffset(3600*3); // tmp, move to config
@@ -244,7 +241,7 @@ void initMR6C()
     if (!mr6cInited && (mr6cLastUpdateTime + 1000000LL) < esp_timer_get_time()) {
         mr6cLastUpdateTime = esp_timer_get_time();
 
-        for (uint8_t i = 1; i <= 6; ++i) {
+        for (uint8_t i = 2; i <= 6; ++i) {
             if (!mr6c->setInputMode(i, EDWB::MR6C_INPUT_MODE_FREQUENCY)) {
                 LOGE("initMR6C", "failed to set input mode for channel %u", i);
                 return;
@@ -256,9 +253,34 @@ void initMR6C()
     }
 }
 
+void initGateContact()
+{
+    if (!gateContactInited && (gateContactLastUpdateTime + 1000000LL) < esp_timer_get_time()) {
+        gateContactLastUpdateTime = esp_timer_get_time();
+
+        gateContactInited = gateContact->init(500, {
+            EDCommon::BinarySensor::withMQTT(
+                &mqtt,
+                configMgr.getData()->mqttTopicsPrefix,
+                "evelyn",
+                "Gate"
+            ),
+            EDCommon::BinarySensor::withDiscovery(&discoveryMgr, device)
+        });
+
+        if (!gateContactInited) {
+            LOGE("initGateContact", "failed to init gate binary sensor");
+            return;
+        }
+
+        LOGI("initGateContact", "successful inited gate binary sensor");
+    }
+}
+
 void loop()
 {
     initMR6C();
+    initGateContact();
 
     networkMgr.loop();
     discoveryMgr.loop();
@@ -273,7 +295,10 @@ void loop()
     leftLawnWatering->update();
     localAreaRightLawnWatering->update();
     rainwaterPitLevel->update();
-    gateContact->update();
+
+    if (gateContactInited) {
+        gateContact->update();
+    }
 
     lightAutomation->update();
 }

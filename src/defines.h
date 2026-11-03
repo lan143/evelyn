@@ -30,9 +30,6 @@
 #define CONTROLLER_NAME "Evelyn"
 #endif
 
-#define WIFI_SSID_LEN 32 + 1
-#define WIFI_PWD_LEN 64 + 1
-
 #define HOST_LEN 64
 #define MQTT_DEFAULT_PORT 1883
 

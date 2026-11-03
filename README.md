@@ -43,9 +43,10 @@ WB-MR6C v.3 channel map:
 | 5 | Local-area right lawn watering | 20-minute auto-off |
 | 6 | — | Unused |
 
-Input 1 is used for the gate contact. By current firmware design all MR6C
-inputs 1–6 are configured as frequency inputs at boot; verify the gate sensor
-behavior against the attached hardware.
+Input 1 is owned by the gate contact binary sensor, which sets its own input
+mode during init; MR6C inputs 2–6 are neutralized (frequency mode) on every
+boot. The gate sensor init automatically retries once per second until the
+Modbus bus answers, so it also comes up when the relay module boots slowly.
 
 Modbus defaults (9600 baud, 8N1):
 

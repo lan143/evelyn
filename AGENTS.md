@@ -62,8 +62,8 @@ MQTT + network callback → healthcheck → web handler → discovery + shared
 `EDHA::Device` → MR6C → 7 entities → NTP → Sun → `LightAutomation`.
 `loop()` calls, in order: `initMR6C()`, `networkMgr`, `discoveryMgr`,
 `ArduinoOTA.handle`, `healthCheck`, `networkLogger.update`,
-`timeClient.update`, the `update()` of all 7 entities, then
-`lightAutomation->update()`.
+`timeClient.update`, the `update()` of the 7 entities (the gate binary sensor
+only after its init succeeded), then `lightAutomation->update()`.
 
 ## 4. External library ecosystem
 
@@ -74,11 +74,13 @@ ed-common. `ESP32Async/ESPAsyncWebServer` + `ArduinoJSON` serve the API;
 is declared in `lib_deps` but never included or used in `src/`.
 
 Entities follow the `EDCommon` component pattern: allocate with `new`, call
-`init(...)` with MQTT and discovery options, and let `loop()` call `update()`:
+`init(...)` with MQTT and discovery options (relays take a `switchChannel`
+second argument, `-1` when no button input is wired; sensors take `precision`
+and an update interval in milliseconds) and let `loop()` call `update()`:
 
 ```cpp
 leftLawnWatering = new EDCommon::Relay::WBMR6C(mr6c);
-leftLawnWatering->init(MR6C_CHANNEL_LEFT_LAWN_WATERING, {
+leftLawnWatering->init(MR6C_CHANNEL_LEFT_LAWN_WATERING, -1, {
     EDCommon::Relay::withMQTT(
         &mqtt,
         configMgr.getData()->mqttTopicsPrefix,
@@ -93,6 +95,10 @@ leftLawnWatering->init(MR6C_CHANNEL_LEFT_LAWN_WATERING, {
 Lights use `EDCommon::Light::Relay` + `EDCommon::Light::withMQTT` /
 `withDiscovery`. Every entity registers in BOTH MQTT and HA discovery via the
 single shared `EDHA::Device` created in `main.cpp`, with room argument `evelyn`.
+
+`BinarySensor::WBMR6C` takes `(channel, deviceClass, reverse, mr6c)` in its
+constructor and configures its own MR6C input mode during `init()`;
+`Sensor::WaterLevel` wraps the `EDWB::QDY30A` driver.
 
 ## 5. Configuration model
 
@@ -109,12 +115,13 @@ HARD RULE: any change to the `Config` struct layout requires bumping
 versioned. The default `otaPassword` is duplicated in `main.cpp` (`setDefault`)
 and in `platformio.ini` (`espota upload_flags`) — keep the two in sync.
 
-Dependencies in `platformio.ini` are pinned by 40-character git SHA for the eight
-`ed-*` libraries (ed-mqtt, ed-config, ed-utils, ed-ha, ed-healthcheck, ed-wb,
-ed-network, ed-common). The registry libraries (ESPAsyncWebServer, ArduinoJSON,
-FS, TCA9555, FastLED, NTPClient) are still unpinned floats. Do not float the
-`ed-*` refs back to bare URLs and do not add new floating dependencies; pin any
-touched dependency to a full SHA in the same change.
+Dependencies in `platformio.ini` are pinned for the eight `ed-*` libraries: tags
+where upstream has them at the wanted state (ed-mqtt 0.1.1, ed-common 0.4.0) and
+40-character git SHAs otherwise (ed-config, ed-utils, ed-ha, ed-healthcheck,
+ed-wb, ed-network). The registry libraries (ESPAsyncWebServer, ArduinoJSON, FS,
+TCA9555, FastLED, NTPClient) are still unpinned floats. Do not float the `ed-*`
+refs back to bare URLs and do not add new floating dependencies; pin any touched
+dependency to a tag or full SHA in the same change.
 
 ## 6. Conventions
 
@@ -163,10 +170,15 @@ touched dependency to a full SHA in the same change.
 - The sun coordinates (`44.067465, 42.887368`) and UTC+3 offsets in
   `timeClient.setTimeOffset(3600*3)` and `SunConfig(..., 3600*3)` are hardcoded
   and marked `// tmp, move to config`. Treat them as temporary.
-- `initMR6C()` forces MR6C inputs 1..6 into `MR6C_INPUT_MODE_FREQUENCY` on every
-  boot until it succeeds (about 1 s retry cadence), while `gateContact` reads
-  input 1. This is the observed firmware behavior; verify it against the
-  attached hardware before relying on the gate sensor.
+- `initMR6C()` forces MR6C inputs 2..6 into `MR6C_INPUT_MODE_FREQUENCY` on every
+  boot until it succeeds (about 1 s retry cadence); this neutralizes the unused
+  button inputs. Input 1 is owned by `gateContact` — the new
+  `EDCommon::BinarySensor::WBMR6C` sets its own input mode during `init()`.
+- A failed binary-sensor `init()` leaves the internal update interval at zero,
+  which would busy-poll the Modbus bus from `update()`. `initGateContact()`
+  therefore retries `gateContact->init(500, ...)` every second until success and
+  `loop()` only calls `gateContact->update()` when `gateContactInited` is true.
+  Preserve this guard when touching the gate wiring.
 - `GET /api/wifi/list` is a stub: the handler body is fully commented out, so it
   never responds. Do not document it as a working scan endpoint.
 - `LightAutomation::init()` is never called. This is harmless: `_nextUpdateTime`
