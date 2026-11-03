@@ -34,6 +34,10 @@ EDNetwork::NetworkMgr networkMgr;
 EDMQTT::MQTT mqtt;
 EDWB::WirenBoard modbus(Serial1, RS485RTS);
 
+EDWB::MR6C* mr6c = nullptr;
+bool mr6cInited = false;
+int64_t mr6cLastUpdateTime = 0;
+
 EDHealthCheck::HealthCheck healthCheck;
 EDHA::DiscoveryMgr discoveryMgr;
 
@@ -137,13 +141,7 @@ void setup()
         ->setName(deviceName)
         ->setManufacturer(deviceManufacturer);
 
-    auto mr6c = modbus.addMR6C(configMgr.getData()->modbusAddressWBMR6C);
-    mr6c->setInputMode(MR6C_CHANNEL_LOCAL_AREA_BACKLIGHT, EDWB::MR6C_INPUT_MODE_DONT_USE);
-    mr6c->setInputMode(MR6C_CHANNEL_YARD_FENCE_BACKLIGHT, EDWB::MR6C_INPUT_MODE_DONT_USE);
-    mr6c->setInputMode(MR6C_CHANNEL_LOCAL_AREA_GARLAND, EDWB::MR6C_INPUT_MODE_DONT_USE);
-    mr6c->setInputMode(MR6C_CHANNEL_LEFT_LAWN_WATERING, EDWB::MR6C_INPUT_MODE_DONT_USE);
-    mr6c->setInputMode(MR6C_CHANNEL_LOCAL_AREA_RIGHT_LAWN_WATERING, EDWB::MR6C_INPUT_MODE_DONT_USE);
-    mr6c->setInputMode(MR6C_CHANNEL_SIX, EDWB::MR6C_INPUT_MODE_DONT_USE);
+    mr6c = modbus.addMR6C(configMgr.getData()->modbusAddressWBMR6C);
 
     auto localAreaBacklightRelay = new EDCommon::Relay::WBMR6C(mr6c);
     localAreaBacklightRelay->init(MR6C_CHANNEL_LOCAL_AREA_BACKLIGHT, {});
@@ -192,7 +190,8 @@ void setup()
             "evelyn",
             "Left lawn watering"
         ),
-        EDCommon::Relay::withDiscovery(&discoveryMgr, device)
+        EDCommon::Relay::withDiscovery(&discoveryMgr, device),
+        EDCommon::Relay::withTimeout(20*60*1000000LL),
     });
 
     localAreaRightLawnWatering = new EDCommon::Relay::WBMR6C(mr6c);
@@ -203,7 +202,8 @@ void setup()
             "evelyn",
             "Local area right watering"
         ),
-        EDCommon::Relay::withDiscovery(&discoveryMgr, device)
+        EDCommon::Relay::withDiscovery(&discoveryMgr, device),
+        EDCommon::Relay::withTimeout(20*60*1000000LL),
     });
 
     auto qdy30a = modbus.addQDY30A(configMgr.getData()->modbusAddressQDY30A);
@@ -232,15 +232,34 @@ void setup()
     timeClient.begin();
     timeClient.setTimeOffset(3600*3); // tmp, move to config
 
-    sun.init(SunConfig(44.067465f, 42.887368f, 3600)); // tmp, move to config
+    sun.init(SunConfig(44.067465f, 42.887368f, 3600*3)); // tmp, move to config
 
     lightAutomation = new LightAutomation(&timeClient, &sun, localAreaBacklight);
 
     LOGI("setup", "complete");
 }
 
+void initMR6C()
+{
+    if (!mr6cInited && (mr6cLastUpdateTime + 1000000LL) < esp_timer_get_time()) {
+        mr6cLastUpdateTime = esp_timer_get_time();
+
+        for (uint8_t i = 1; i <= 6; ++i) {
+            if (!mr6c->setInputMode(i, EDWB::MR6C_INPUT_MODE_FREQUENCY)) {
+                LOGE("initMR6C", "failed to set input mode for channel %u", i);
+                return;
+            }
+        }
+
+        LOGI("initMR6C", "successful inited WB-MR6C");
+        mr6cInited = true;
+    }
+}
+
 void loop()
 {
+    initMR6C();
+
     networkMgr.loop();
     discoveryMgr.loop();
     ArduinoOTA.handle();
