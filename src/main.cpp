@@ -9,6 +9,7 @@
 #include <healthcheck.h>
 #include <wirenboard.h>
 #include <network/network.h>
+#include <network/network_api.h>
 #include <log/log.h>
 #include <Wire.h>
 #include <TCA9555.h>
@@ -25,12 +26,14 @@
 #include "config.h"
 #include "service/sun.h"
 #include "automation/light.h"
+#include "control/devices.h"
 #include "web/handler.h"
 
 TCA9555 tca9555(0x20, &Wire);
 
 EDConfig::DataMgr<Config> configMgr(new EDConfig::StorageLittleFS<Config>("/config.bin"));
 EDNetwork::NetworkMgr networkMgr;
+EDNetwork::NetworkApi networkApi(networkMgr);
 EDMQTT::MQTT mqtt;
 EDWB::WirenBoard modbus(Serial1, RS485RTS);
 
@@ -49,7 +52,7 @@ NTPClient timeClient(ntpUDP);
 
 Sun sun;
 
-Handler handler(&configMgr, &networkMgr, &healthCheck);
+Handler handler(&configMgr, &networkMgr, &networkApi, &healthCheck, &networkLogger);
 
 EDCommon::Light::Relay* localAreaBacklight = nullptr;
 EDCommon::Light::Relay* yardFenceBacklight = nullptr;
@@ -58,6 +61,8 @@ EDCommon::Relay::WBMR6C* leftLawnWatering = nullptr;
 EDCommon::Relay::WBMR6C* localAreaRightLawnWatering = nullptr;
 EDCommon::Sensor::WaterLevel* rainwaterPitLevel = nullptr;
 EDCommon::BinarySensor::WBMR6C* gateContact = nullptr;
+
+Devices* devices = nullptr;
 
 LightAutomation* lightAutomation = nullptr;
 
@@ -128,8 +133,6 @@ void setup()
         }
     });
     healthCheck.registerService(&mqtt);
-
-    handler.init();
 
     discoveryMgr.init(
         configMgr.getData()->mqttHADiscoveryPrefix,
@@ -226,6 +229,18 @@ void setup()
     gateContact = new EDCommon::BinarySensor::WBMR6C(1, EDHA::deviceClassBinarySensorDoor, false, mr6c);
     initGateContact();
 
+    devices = new Devices(
+        localAreaBacklight,
+        yardFenceBacklight,
+        localAreaGarland,
+        leftLawnWatering,
+        localAreaRightLawnWatering,
+        rainwaterPitLevel,
+        gateContact
+    );
+
+    handler.init(devices);
+
     timeClient.begin();
     timeClient.setTimeOffset(3600*3); // tmp, move to config
 
@@ -298,6 +313,10 @@ void loop()
 
     if (gateContactInited) {
         gateContact->update();
+    }
+
+    if (devices != nullptr) {
+        devices->updateSnapshot();
     }
 
     lightAutomation->update();

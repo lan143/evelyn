@@ -1,0 +1,25 @@
+{
+  "name": "evelyn-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Evelyn WB-MGE yard controller web panel (Preact SPA built into ../data)",
+  "scripts": {
+    "dev": "vite",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "edc-config-ui": "file:../../ed-config/frontend",
+    "edn-network-ui": "file:../../ed-network/frontend",
+    "edu-log-ui": "file:../../ed-utils/frontend",
+    "preact": "^10.29.8"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.28.0",
+    "@preact/preset-vite": "^2.10.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6"
+  }
+}
