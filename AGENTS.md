@@ -29,7 +29,7 @@ littlefs`, `board_build.flash_mode = dio`) and `wbmge_ota` (extends `wbmge`,
 npm --prefix frontend run build  # typecheck + Vite build into data/ (web UI)
 pio run -e wbmge                 # compile (minimum validation)
 pio run -e wbmge -t upload       # flash firmware over USB
-pio run -e wbmge -t uploadfs     # REQUIRED after any change under data/
+pio run -e wbmge -t uploadfs     # REQUIRED after data/ change; rewrites LittleFS incl. /config.bin
 pio run -e wbmge_ota -t upload   # OTA update; target IP is upload_port in platformio.ini
 pio device monitor -b 115200     # serial monitor (exception decoder enabled)
 ```
@@ -40,6 +40,15 @@ sources live in `frontend/`; run `npm --prefix frontend run build` (which runs
 `pio run -e wbmge -t uploadfs` before the change is visible on the device. Vite
 clears `data/` on every build (`emptyOutDir`), so stale files cannot survive.
 `npm --prefix frontend install` is needed once (and after dependency changes).
+
+`pio run -e wbmge -t uploadfs` rewrites the ENTIRE LittleFS partition, which
+also stores `/config.bin` — flashing the filesystem factory-resets the device
+config. (A firmware-only `pio run -e wbmge_ota -t upload` does not touch
+LittleFS.) Before any uploadfs, make sure `data/config.bin` exists by extracting
+it from the device's config backup archive (`GET /api/config` on a healthy
+device downloads the raw config), because `npm --prefix frontend run build`
+clears `data/` via `emptyOutDir` and the filesystem image is built from `data/`.
+Keep backup archives outside the repository: they contain plaintext credentials.
 
 Shell output in this repository is wrapped by `rtk`; see `RTK.md` for the
 token-saving recipes and for recovering full output. There are no unit tests and
@@ -113,6 +122,14 @@ constructor and configures its own MR6C input mode during `init()`;
 topic prefix `evelyn/<chipid>`, Modbus speed `9600`, QDY30A address `1` and
 WB-MR6C address `2`.
 
+On the deployed Evelyn hardware the WB-MR6C Modbus address is `120`, while the
+`setDefault` factory default is `2` — so a config wipe (see the uploadfs note in
+section 2) silently breaks relay control until the config is restored. The
+QDY30A address (`1`) matches. The factory defaults also produce an open fallback
+AP named `Evelyn_<uppercase colon MAC>` that only appears after roughly 15-45 s
+without connectivity: boot is Ethernet-first, and with `isAPMode=false` the
+fallback goes to Wi-Fi STA instead of AP.
+
 HARD RULE: any change to the `Config` struct layout requires bumping
 `CURRENT_VERSION` in `src/config.h` (currently `1`) because ed-config storage is
 versioned. The default `otaPassword` is duplicated in `main.cpp` (`setDefault`)
@@ -170,6 +187,14 @@ build. Never remove the `lib_ignore` lines or add those backends to `lib_deps`.
   only and do not extend the exposure. Any new POST endpoint must validate
   required params/lengths and answer `422` with a JSON `{"message": ...}` body,
   following the existing handlers.
+- `GET /api/config` and static serving expose `/config.bin` in plaintext on the
+  web root (the same trusted-LAN-only rule as the credential endpoints above).
+- `GET /api/network/status` (ed-network `NetworkApi`) reports
+  mode/wifiConnected/ethernetConnected/rssi/ip/mac; it is the quickest way to
+  see why a device is on Wi-Fi versus Ethernet.
+- The healthcheck route is `/healthcheck/healty` — an upstream typo pinned in
+  the ed-healthcheck library that the frontend intentionally matches. Do not
+  "fix" the client path.
 - `POST /api/settings/wifi` ignores the return value of `configMgr.store()` and
   always answers `200`; the Modbus handler is the reference for reporting a
   store failure (`500`).
@@ -210,6 +235,11 @@ build. Never remove the `lib_ignore` lines or add those backends to `lib_deps`.
   device-sensitive: flag them for physical testing on real hardware.
 - For OTA-only changes, `pio run -e wbmge_ota -t upload` must target the device
   IP in `platformio.ini` and use the OTA password configured on the device.
+- After any uploadfs, verify on serial (or remote log) that the config was
+  accepted: `validate checksum` matches, the mqtt host is non-empty in
+  `[mqtt] init start`, and `successful inited WB-MR6C` appears. The loopTask
+  must no longer show WiFiUdp DNS timeouts when offline (fixed by gating
+  `timeClient.update()` on `networkMgr.isConnected()` in `loop()`).
 
 ## 9. Known gaps
 

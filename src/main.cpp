@@ -302,7 +302,9 @@ void loop()
     ArduinoOTA.handle();
     healthCheck.loop();
     networkLogger.update();
-    timeClient.update();
+    if (networkMgr.isConnected()) {
+        timeClient.update();
+    }
 
     localAreaBacklight->update();
     yardFenceBacklight->update();
