@@ -74,8 +74,7 @@ only after its init succeeded), then `lightAutomation->update()`.
 The runtime core is the author's `ed-*` library family (`github.com/lan143`):
 ed-mqtt, ed-config, ed-utils, ed-ha, ed-healthcheck, ed-wb, ed-network,
 ed-common. `ESP32Async/ESPAsyncWebServer` + `ArduinoJSON` serve the API;
-`TCA9555` drives the I2C expander; `NTPClient` and `FS` are also used. `FastLED`
-is declared in `lib_deps` but never included or used in `src/`.
+`TCA9555` drives the I2C expander; `NTPClient` and `FS` are also used.
 
 Entities follow the `EDCommon` component pattern: allocate with `new`, call
 `init(...)` with MQTT and discovery options (relays take a `switchChannel`
@@ -120,12 +119,19 @@ versioned. The default `otaPassword` is duplicated in `main.cpp` (`setDefault`)
 and in `platformio.ini` (`espota upload_flags`) — keep the two in sync.
 
 Dependencies in `platformio.ini` are pinned for the eight `ed-*` libraries: tags
-where upstream has them at the wanted state (ed-mqtt 0.1.1, ed-common 0.4.0) and
-40-character git SHAs otherwise (ed-config, ed-utils, ed-ha, ed-healthcheck,
-ed-wb, ed-network). The registry libraries (ESPAsyncWebServer, ArduinoJSON, FS,
-TCA9555, FastLED, NTPClient) are still unpinned floats. Do not float the `ed-*`
-refs back to bare URLs and do not add new floating dependencies; pin any touched
-dependency to a tag or full SHA in the same change.
+where upstream has them at the wanted state (ed-mqtt 0.1.1, ed-utils 0.2.0,
+ed-common 0.4.0) and 40-character git SHAs otherwise (ed-config, ed-ha,
+ed-healthcheck, ed-wb, ed-network, because upstream has no tags or the tag is
+older than the working commit). The registry libraries are pinned too:
+ESPAsyncWebServer 3.12.1, AsyncTCP 3.5.0, ArduinoJson 7.4.3, TCA9555 0.4.4 and
+NTPClient 3.2.1. `FS` is an Arduino framework built-in without a version pin. Do
+not float the `ed-*` refs back to bare URLs and do not add new floating
+dependencies; pin any touched dependency to a tag or full SHA in the same
+change. The `lib_ignore = RPAsyncTCP, ESPAsyncTCP` option in `[env:wbmge]`
+exists because ESPAsyncWebServer 3.12.1 declares all platform TCP backends as
+transitive dependencies and PlatformIO 6.2.0 does not filter them by target
+platform. On ESP32 only the explicitly pinned `ESP32Async/AsyncTCP` backend may
+build. Never remove the `lib_ignore` lines or add those backends to `lib_deps`.
 
 ## 6. Conventions
 
@@ -208,12 +214,9 @@ dependency to a tag or full SHA in the same change.
 ## 9. Known gaps
 
 - No unit tests, no CI pipeline and no lint/format configuration.
-- Registry libraries (`ESPAsyncWebServer`, `ArduinoJSON`, `FS`, `TCA9555`,
-  `FastLED`, `NTPClient`) are unpinned and resolve to latest versions; only the
-  `ed-*` family is SHA-pinned.
-- `FastLED` is declared but unused; legacy macros `RELAY_WARM_FLOOR`,
-  `RELAY_UNKNOW`, `MQTT_DEFAULT_PORT` and `MR6C_CHANNEL_SIX` in
-  `src/defines.h` are likewise unused.
+- `FS` is an Arduino framework built-in library with no version pin.
+- Legacy macros `RELAY_WARM_FLOOR`, `RELAY_UNKNOW`, `MQTT_DEFAULT_PORT` and
+  `MR6C_CHANNEL_SIX` in `src/defines.h` are unused.
 - `deviceFWVersion` in `src/defines.h` is maintained manually (currently
   `0.1.0`).
 - `CURRENT_VERSION` is still `1`; bump it with any `Config` layout change.
