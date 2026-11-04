@@ -226,7 +226,7 @@ void setup()
         EDCommon::Sensor::withDiscovery(&discoveryMgr, device)
     });
 
-    gateContact = new EDCommon::BinarySensor::WBMR6C(1, EDHA::deviceClassBinarySensorDoor, false, mr6c);
+    gateContact = new EDCommon::BinarySensor::WBMR6C(1, EDHA::deviceClassBinarySensorDoor, true, mr6c);
     initGateContact();
 
     devices = new Devices(
